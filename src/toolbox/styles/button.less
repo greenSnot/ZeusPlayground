@@ -1,0 +1,40 @@
+.atomicButtonAdd, .atomicButtonRemove {
+  border-radius: 100%;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #fff;
+  position: relative;
+  box-sizing: border-box;
+}
+.atomicButtonAdd:before, .atomicButtonAdd:after, .atomicButtonRemove:after {
+  content: '';
+  width: 6px;
+  height: 1px;
+  background: #fff;
+  display: inline-block;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-50%);
+}
+.atomicButtonAdd:before {
+  transform: translateX(-50%) translateY(-50%) rotate(90deg) ;
+}
+.atomicButtonRun {
+  width: 30px;
+  height: 20px;
+  margin: 0 4px 0 4px;
+  background: #fff;
+  box-sizing: border-box;
+  border-bottom: 5px solid #f1c40f;
+  border-radius: 2px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.atomicButtonRun:after {
+  content: 'run';
+  color: #666;
+  display: inline-block;
+}

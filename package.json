@@ -1,0 +1,51 @@
+{
+  "name": "zeus-playground",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/greenSnot/ZeusPlayground.git"
+  },
+  "scripts": {
+    "dev": "webpack-dev-server --mode=development",
+    "benchmark": "tsc benchmark/index.ts --outDir ./benchmark/tmp --lib 'ESNext,DOM' --pretty && node benchmark/tmp/benchmark/index.js",
+    "build": "webpack"
+  },
+  "dependencies": {
+    "@types/react": "16.3.14",
+    "@types/react-dom": "^16.0.5",
+    "@types/three": "^0.91.10",
+    "fast-voxel-raycast": "^0.1.1",
+    "froggy": "^1.1.4",
+    "froggy-interpreter": "^1.1.3",
+    "lodash": "^4.17.5",
+    "material-ui": "^0.18.3",
+    "microtime": "^2.1.7",
+    "react": "^16.3.2",
+    "react-addons-update": "^15.6.2",
+    "react-dom": "^16.3.2",
+    "react-tap-event-plugin": "^3.0.2",
+    "three": "^0.92.0",
+    "tslint": "^5.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^10.0.8",
+    "copy-webpack-plugin": "^4.5.1",
+    "html-webpack-plugin": "^3.2.0",
+    "css-loader": "^0.28.11",
+    "typings-for-css-modules-loader": "^1.7.0",
+    "less": "^3.0.4",
+    "less-loader": "^4.1.0",
+    "node-sass": "^4.9.0",
+    "sass-loader": "^7.0.1",
+    "style-loader": "^0.21.0",
+    "ts-loader": "^4.2.0",
+    "typescript": "^2.8.3",
+    "voxel": "^0.5.0",
+    "webpack": "^4.6.0",
+    "webpack-cli": "^2.0.15",
+    "webpack-dev-server": "^3.1.3",
+    "worker-loader": "^1.1.1"
+  },
+  "author": "greenSnot",
+  "license": "GPL-3.0"
+}
