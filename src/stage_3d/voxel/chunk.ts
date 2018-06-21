@@ -1,4 +1,4 @@
-import Worker from 'worker-loader!./Worker';
+import Worker from 'worker-loader!./worker';
 
 import THREE from '../engine';
 
@@ -31,7 +31,7 @@ async function get_idle_worker(): Promise<[Worker, number]> {
  * x-y plane, z = 2
  * ...
  */
-const texture = new THREE.TextureLoader().load('images/grass.png');
+const texture = new THREE.TextureLoader().load('images/fgrass.png');
 texture.magFilter = THREE.NearestFilter;
 texture.minFilter = THREE.LinearMipMapLinearFilter;
 const material = new THREE.MeshBasicMaterial(
@@ -54,18 +54,18 @@ function gen_mesh_from_geo_attributes(attributes) {
   return chunk_mesh;
 }
 
-export async function gen_chunk_mesh(chunk_id, voxels, chunk_mesh_to_cancel) {
+export async function gen_chunk_mesh(chunk_id, voxels, is_running) {
+  const version = Date.now();
   return new Promise((resolve, reject) => {
     get_idle_worker().then(([worker, id]) => {
       worker.postMessage(voxels);
       worker.onmessage = ({ data }) => {
-        worker_status[id] = WorkerStatus.idle;
-        if (chunk_mesh_to_cancel[chunk_id]) {
-          chunk_mesh_to_cancel[chunk_id] = false;
+        if (!is_running()) {
           reject();
           return;
         }
-        resolve(gen_mesh_from_geo_attributes(data));
+        worker_status[id] = WorkerStatus.idle;
+        resolve([gen_mesh_from_geo_attributes(data), version]);
       };
     });
   });

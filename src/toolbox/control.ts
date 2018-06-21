@@ -155,7 +155,10 @@ const bricks: {
     fn: (interpreter: Interpreter, [secs]) => {
       interpreter.sleep(secs);
     },
-    to_code: () => {},
+    to_code: (brick, util) => `
+      await global.$runtime_mgr.sleep(${util.brick_to_code(brick.inputs[0])});
+      ${util.brick_to_code(brick.next)}
+    `,
   },
   control_repeat_n_times: {
     brick_def: {

@@ -1,24 +1,18 @@
 import THREE from './engine';
 
-import { int_to_rgba } from '../util';
 import {
   get_voxel,
-  voxel_xyz_to_voxel_index,
-  voxel_xyz_to_voxel_index_3x3,
-  world_xyz_to_chunk_id,
-  world_xyz_to_local_voxel_xyz,
-  world_xyz_to_voxel_xyz,
-  CHUNK_SIZE,
-  CHUNK_WIDTH,
   VOXEL_WIDTH,
-  WORLD_XYZ,
 } from './voxel';
 
-const delta = 0.16;
-const G = 9.8;
+import { G } from './util';
 
-type RGBA = [number, number, number, number];
-export default class Puppet {
+const delta = 0.16;
+type RotationOrder = 'XYZ' | 'XZY' | 'YXZ' | 'YZX' | 'ZXY' | 'ZYX';
+const temp_vector3 = new THREE.Vector3();
+const temp_euler = new THREE.Euler();
+
+export default class Entity {
   mass = 0;
 
   private obj: THREE.Object3D = new THREE.Object3D();
@@ -27,7 +21,8 @@ export default class Puppet {
   private direction = new THREE.Vector3();
 
   private max_velocity = VOXEL_WIDTH / 20;
-  private friction = 0.08;
+  friction = 0.08;
+  air_friction = 0;
 
   private bounding_box: number[];
   private mesh: THREE.Mesh;
@@ -35,12 +30,25 @@ export default class Puppet {
   private get_chunk_data: Function;
   private id;
 
+  is_child_entity = false;
+  collidable = true;
+
   constructor(id, bounding_box, get_chunk_data) {
     this.get_chunk_data = get_chunk_data;
     this.id = id;
     this.bounding_box = bounding_box;
 
-    // this.obj.add(new THREE.AxesHelper(150));
+    false && this.obj.add(new THREE.Mesh(
+        new THREE.BoxGeometry(
+          this.bounding_box[0],
+          this.bounding_box[1],
+          this.bounding_box[2]),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true,
+        }),
+      ));
+    // this.obj.add(new THREE.AxesHelper(1));
   }
 
   set_color(rgba: string) {
@@ -95,6 +103,10 @@ export default class Puppet {
     this.max_velocity = v;
   }
 
+  set_velocity(v) {
+    this.velocity.set(v[0], v[1], v[2]);
+  }
+
   change_velocity(v: number[]) {
     this.velocity.set(
       this.velocity.x + v[0],
@@ -118,33 +130,48 @@ export default class Puppet {
   }
 
   update() {
+    if (!this.mass) {
+      return;
+    }
     this.velocity.x -= this.velocity.x * this.friction;
     this.velocity.z -= this.velocity.z * this.friction;
-    this.velocity.y -= G * this.mass * delta;
+    this.velocity.y -= G * delta * (1 - this.air_friction);
     this.direction.normalize(); // this ensures consistent movements in all directions
     this.velocity.z -= this.direction.z * this.max_velocity;
     this.velocity.x -= this.direction.x * this.max_velocity;
 
-    ['x', 'y', 'z'].map(i => {
+    this.collidable && ['x', 'y', 'z'].forEach(i => {
       if (this.collide(this.get_next_position(i))) {
         // TODO bounce
         this.velocity[i] = 0;
       }
     });
 
-    this.obj.translateX(this.velocity.x * delta);
-    this.obj.translateY(this.velocity.y * delta);
-    this.obj.translateZ(this.velocity.z * delta);
+    if (this.is_child_entity) {
+      const offset = [
+        this.velocity.x * delta,
+        this.velocity.y * delta,
+        this.velocity.z * delta,
+      ];
+      this.translate_by(offset);
+    } else {
+      const offset = [
+        this.velocity.x * delta,
+        0,
+        this.velocity.z * delta,
+      ];
+      this.translate_by_local(offset);
+      this.translate_by([0, this.velocity.y * delta, 0]);
+    }
   }
 
   get_position = () => this.obj.position.toArray();
+  get_world_position = () => temp_vector3.setFromMatrixPosition(this.obj.matrixWorld).toArray();
   get_rotation = () => this.obj.rotation.toArray();
-  set_rotation = (v) => {
+  get_world_rotation = (order) => temp_euler.setFromRotationMatrix(this.obj.matrixWorld, order).toArray();
+
+  rotate_to = (v) => {
     this.obj.rotation.fromArray(v);
-    this.obj.updateMatrixWorld(true);
-  }
-  set_position = (v) => {
-    this.obj.position.fromArray(v);
     this.obj.updateMatrixWorld(true);
   }
   rotate_by = (v) => {
@@ -156,11 +183,15 @@ export default class Puppet {
       this.obj.rotation.order,
     ]);
   }
+  translate_to = (v) => {
+    this.obj.position.fromArray(v);
+    this.obj.updateMatrixWorld(true);
+  }
   translate_by = (v) => {
     this.obj.position.fromArray(this.get_position().map((i, j) => i + v[j]));
     this.obj.updateMatrixWorld(true);
   }
-  translate_local_by = (v) => {
+  translate_by_local = (v) => {
     const a = ((new THREE.Vector3()).fromArray(v)).applyMatrix4(this.obj.matrixWorld);
     this.obj.position.set(a.x, a.y, a.z);
     this.obj.updateMatrixWorld(true);
@@ -168,6 +199,12 @@ export default class Puppet {
 
   get_obj = () => this.obj;
 
-  add = (p: Puppet) => this.obj.add(p.get_obj());
-  remove = (p: Puppet) => this.obj.remove(p.get_obj());
+  set_rotation_order = (order: RotationOrder) => this.obj.rotation.reorder(order);
+
+  attach_to = (p: Entity) => {
+    p.is_child_entity = true;
+    this.obj.add(p.get_obj());
+  }
+
+  detach_from = (p: Entity) => this.obj.remove(p.get_obj());
 }

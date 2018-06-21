@@ -2,6 +2,7 @@ import raycast from 'fast-voxel-raycast';
 import THREE from './engine';
 
 import { flatten, seed } from '../util';
+import * as util from './util';
 import {
   ao_map_kinds,
   chunk_id_to_chunk_xyz,
@@ -22,7 +23,11 @@ import {
 import { gen_chunk_mesh } from './voxel/chunk';
 
 import Controller from './controller';
-import Puppet from './puppet';
+import Entity from './entity';
+
+import config from './config';
+
+import { get_global_variables } from '../runtime_mgr';
 
 const random = seed(666);
 
@@ -37,12 +42,6 @@ enum CHUNK_MESH_STATUS {
   LOADED = 2,
 }
 
-enum CHUNK_DATA_STATUS {
-  NONE = 0,
-  PENDDING = 1,
-  READY = 2,
-}
-
 (window as any).THREE = THREE;
 
 type Material = number;
@@ -50,16 +49,10 @@ type ChunkData = Material[];
 type ChunkMesh = THREE.Object3D;
 
 const t = new THREE.Vector3();
-let terrain_fn = (g, x, y, z) => {
-  const abs = Math.abs;
-  const cos = Math.cos;
-  const sin = Math.sin;
-  return (abs(3 * cos(x / 2) * sin(z / 2) - y + 3) < 0.5) ? 1 : 0;
-};
-
+let terrain_generator;
 const gen_terrain = (world_xyz) => (new Array(CHUNK_SIZE_CUBIC) as any).fill(undefined).map((v, idx) => {
   const [x, y, z] = voxel_index_to_voxel_xyz(idx);
-  return terrain_fn(undefined, world_xyz[0] + x, world_xyz[1] + y, world_xyz[2] + z);
+  return terrain_generator(get_global_variables(), world_xyz[0] + x, world_xyz[1] + y, world_xyz[2] + z);
 });
 
 const CHUNK_ADJACENT_HORIZONTAL_FAR = 3;
@@ -70,22 +63,20 @@ export class Stage3d {
   private camera: THREE.PerspectiveCamera;
   private scene: THREE.Object3D;
   private renderer;
-  private controller: Controller;
   private camera_world_xyz: WORLD_XYZ;
   private focus_mode = FocusMode.replacement;
 
   private chunk_data: {[id: string]: ChunkData} = {};
+  private chunk_version: {[id: string]: number} = {};
   private chunk_mesh: {[id: string]: ChunkMesh} = {};
-  private chunk_mesh_to_cancel: {[id: string]: boolean} = {};
   private chunk_mesh_status: {[id: string]: CHUNK_MESH_STATUS} = {};
-  private chunk_data_status: {[id: string]: CHUNK_DATA_STATUS} = {};
   private rendered_chunks: {[id: string]: THREE.Object3D} = {};
   private changes: Map<string, boolean> = new Map();
   private cross_dom = document.getElementById('stage-cross');
   private debug_dom = document.getElementById('stage-debug');
+  private is_running: () => boolean;
 
   private notify_stop;
-  private camera_offset = [0, 0, VOXEL_WIDTH * 3];
 
   private focused_voxel = (function() {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(VOXEL_WIDTH, VOXEL_WIDTH, VOXEL_WIDTH), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }));
@@ -99,21 +90,17 @@ export class Stage3d {
     placement: [0, 0, 0],
   };
 
-  puppets: {[name: string]: Puppet} = {};
+  entities: {[name: string]: Entity} = {};
+  controller: Controller;
 
   constructor() {
     this.container = document.getElementById('stage-3d');
     this.scene = new THREE.Scene();
-
-    window['scene'] = this.scene;
-
     this.init_renderer();
     this.init_camera();
-    this.init_lights();
-
-    this.init_world();
     this.init_events();
-
+    this.init_lights();
+    this.init_world();
     this.scene.add(this.focused_voxel);
   }
 
@@ -123,7 +110,7 @@ export class Stage3d {
     const result = raycast(
       (x, y, z) => get_voxel([x, y, z], this.chunk_data),
       this.camera_world_xyz,
-      this.controller.getDirection().toArray(),
+      this.controller.get_direction().toArray(),
       dis,
       hit_position,
       hit_normal,
@@ -154,19 +141,19 @@ export class Stage3d {
   }
 
   private init_camera() {
-    this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 1, 10000);
-    this.camera.position.set(this.camera_offset[0], this.camera_offset[1], this.camera_offset[2]);
+    this.camera = new THREE.PerspectiveCamera(config.fov, window.innerWidth / window.innerHeight, 1, 10000);
+    this.camera.position.fromArray(config.camera_offset);
     this.controller = new Controller(
       this.camera,
-      new THREE.Vector3(4 * VOXEL_WIDTH, 8 * VOXEL_WIDTH, 3 * VOXEL_WIDTH),
+      new THREE.Vector3(),
       (chunk_id) => this.update_adjacent_chunks(chunk_id),
     );
-    this.scene.add(this.controller.getObject());
+    this.scene.add(this.controller.get_obj());
     this.update_camera_world_xyz();
   }
 
   private update_cross() {
-    const cross_vector = t.copy(this.controller.getObject().position).project(this.camera);
+    const cross_vector = t.copy(this.controller.get_obj().position).project(this.camera);
     cross_vector.x = (cross_vector.x + 1) / 2 * window.innerWidth;
     cross_vector.y = -(cross_vector.y - 1) / 2 * window.innerHeight;
     this.cross_dom.style.left = cross_vector.x.toFixed(3) + 'px';
@@ -176,7 +163,7 @@ export class Stage3d {
   private init_lights() {
     const ambientLight = new THREE.AmbientLight(0xcccccc);
     this.scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.2);
     directionalLight.position.set(1, 1, 0.5).normalize();
     this.scene.add(directionalLight);
   }
@@ -208,6 +195,11 @@ export class Stage3d {
     const pointerLockChange = (event) => {
       this.controller.enabled = document.pointerLockElement === this.container;
       if (!this.controller.enabled) {
+        Object.keys(this.chunk_mesh_status).forEach(i => {
+          if (this.chunk_mesh_status[i] === CHUNK_MESH_STATUS.PENDDING) {
+            this.chunk_mesh_status[i] = CHUNK_MESH_STATUS.NONE;
+          }
+        });
         this.notify_stop();
       }
     };
@@ -217,17 +209,17 @@ export class Stage3d {
     });
   }
 
-  public init_puppet(id: string, bounding_box) {
-    if (this.puppets[id]) {
+  public init_entity(id: string, bounding_box) {
+    if (this.entities[id]) {
       return;
     }
-    const puppet = new Puppet(
+    const entity = new Entity(
       id,
       bounding_box.map(i => i * VOXEL_WIDTH),
       () => this.chunk_data,
     );
-    this.puppets[id] = puppet;
-    this.scene.add(puppet.get_obj());
+    this.entities[id] = entity;
+    this.scene.add(entity.get_obj());
   }
 
   private init_world() {
@@ -247,18 +239,25 @@ export class Stage3d {
     this.scene.add(chunk_helper);
   }
 
-  private remove_chunk(chunk_xyz) {
+  private remove_chunk(chunk_xyz, force = false) {
     const id = chunk_xyz_to_chunk_id(chunk_xyz);
-    const status = this.chunk_mesh_status[id];
+    const status = this.chunk_mesh_status[id] || CHUNK_MESH_STATUS.NONE;
     if (status === CHUNK_MESH_STATUS.NONE) {
-      return;
-    } else if (status === CHUNK_MESH_STATUS.PENDDING) {
-      this.chunk_mesh_to_cancel[id] = true;
-    } else if (status === CHUNK_MESH_STATUS.LOADED) {
-      this.scene.remove(this.rendered_chunks[id]);
-      delete this.rendered_chunks[id];
-      this.chunk_mesh_status[id] = CHUNK_MESH_STATUS.NONE;
+      return false;
     }
+
+    if (status === CHUNK_MESH_STATUS.PENDDING) {
+      if (!force) {
+        return false;
+      }
+    }
+
+    this.scene.remove(this.rendered_chunks[id]);
+    delete this.chunk_mesh[id];
+    delete this.rendered_chunks[id];
+
+    this.chunk_mesh_status[id] = CHUNK_MESH_STATUS.NONE;
+    return true;
   }
 
   private get_adjacent_chunks([x, y, z], h_far = CHUNK_ADJACENT_HORIZONTAL_FAR, v_far = CHUNK_ADJACENT_VERTICAL_FAR) {
@@ -278,6 +277,7 @@ export class Stage3d {
   }
 
   private update_adjacent_chunks(chunk_id) {
+    console.log(chunk_id);
     const chunk_xyz = chunk_id_to_chunk_xyz(chunk_id);
     const adjacent_chunks = this.get_adjacent_chunks(chunk_xyz);
 
@@ -287,16 +287,18 @@ export class Stage3d {
         this.chunk_data[id] = gen_terrain(chunk_xyz_to_world_xyz(i));
       }
 
-      if (
-        this.chunk_mesh_status[id] === CHUNK_MESH_STATUS.LOADED ||
-        this.chunk_mesh_status[id] === CHUNK_MESH_STATUS.PENDDING
-      ) {
+      if (this.chunk_mesh_status[id] === CHUNK_MESH_STATUS.LOADED) {
         return;
       }
 
       this.chunk_mesh_status[id] = CHUNK_MESH_STATUS.PENDDING;
       const world_xyz = chunk_xyz_to_world_xyz(i);
-      gen_chunk_mesh(id, this.chunk_data[id], this.chunk_mesh_to_cancel).then((chunk_mesh: THREE.Object3D) => {
+      gen_chunk_mesh(id, this.chunk_data[id], () => this.is_running).then(([chunk_mesh, version]) => {
+        if (this.chunk_version[id] > version) {
+          return;
+        }
+        this.chunk_version[chunk_id] = version;
+        this.remove_chunk(i, true);
         this.chunk_mesh_status[id] = CHUNK_MESH_STATUS.LOADED;
         chunk_mesh.position.set(world_xyz[0], world_xyz[1], world_xyz[2]);
 
@@ -305,35 +307,37 @@ export class Stage3d {
         chunk_mesh.name = id;
         this.scene.add(chunk_mesh);
       }).catch((e) => {
+        this.chunk_mesh_status[id] = CHUNK_MESH_STATUS.NONE;
       });
     });
 
     // remove far chunks
     Object.keys(this.rendered_chunks).forEach(i => {
       const a = chunk_id_to_chunk_xyz(i);
-      !this.chunk_in_range(chunk_xyz, a) && this.remove_chunk(a);
+      if (!this.chunk_in_range(chunk_xyz, a)) {
+        this.remove_chunk(a);
+      }
     });
   }
 
   private update_chunk(chunk_id) {
-    if (this.chunk_mesh_status[chunk_id] === CHUNK_MESH_STATUS.PENDDING) {
-      return;
-    }
-    this.chunk_mesh_to_cancel[chunk_id] = false;
-
     this.chunk_mesh_status[chunk_id] = CHUNK_MESH_STATUS.PENDDING;
     const chunk_xyz = chunk_id_to_chunk_xyz(chunk_id);
     const [x, y, z] = chunk_xyz_to_world_xyz(chunk_xyz);
-    gen_chunk_mesh(chunk_id, this.chunk_data[chunk_id], this.chunk_mesh_to_cancel).then((chunk_mesh: THREE.Object3D) => {
+    gen_chunk_mesh(chunk_id, this.chunk_data[chunk_id], () => this.is_running).then(([chunk_mesh, version]) => {
+      if (this.chunk_version[chunk_id] > version) {
+        return;
+      }
+      this.remove_chunk(chunk_xyz, true);
       this.chunk_mesh_status[chunk_id] = CHUNK_MESH_STATUS.LOADED;
+      this.chunk_version[chunk_id] = version;
       chunk_mesh.position.set(x, y, z);
-
-      this.chunk_mesh[chunk_id] = chunk_mesh;
       chunk_mesh.name = chunk_id;
-      this.remove_chunk(chunk_xyz);
+      this.chunk_mesh[chunk_id] = chunk_mesh;
       this.rendered_chunks[chunk_id] = chunk_mesh;
       this.scene.add(chunk_mesh);
     }).catch((e) => {
+      this.chunk_mesh_status[chunk_id] = CHUNK_MESH_STATUS.NONE;
       console.log(e);
       console.log(chunk_id);
     });
@@ -347,16 +351,16 @@ export class Stage3d {
       controller world voxel xyz: ${world_xyz_to_voxel_xyz(pos as WORLD_XYZ).toString()},
       chunk id: ${world_xyz_to_chunk_id(pos as WORLD_XYZ).toString()},
       camera world xyz: ${this.camera_world_xyz.map(i => i.toFixed(3)).toString()}
-      focused grid world xyz: ${this.focused_voxel.position.toArray().map(i => i.toFixed(3)).toString()}
-      camera direction: ${this.controller.getDirection().toArray().map(i => i.toFixed(3)).toString()}
+      focused voxel world xyz: ${this.focused_voxel.position.toArray().map(i => i.toFixed(3)).toString()}
+      camera direction: ${this.controller.get_direction().toArray().map(i => i.toFixed(3)).toString()}
     `;
   }
 
   render() {
     this.update_camera_world_xyz();
     this.controller.update();
-    for (const i in this.puppets) {
-      this.puppets[i].update();
+    for (const i in this.entities) {
+      this.entities[i].update();
     }
     this.changes.forEach((v, chunk_id) => this.update_chunk(chunk_id));
     this.changes.clear();
@@ -367,7 +371,8 @@ export class Stage3d {
     this.update_debug_message();
   }
 
-  start(notify_stop) {
+  start(notify_stop, is_running: () => boolean) {
+    this.is_running = is_running;
     this.notify_stop = notify_stop;
     this.container.requestPointerLock();
   }
@@ -380,11 +385,12 @@ export class Stage3d {
     (this.focused_voxel.position.set as any)(...this.focused_voxel_world_xyz[FocusMode[this.focus_mode]]);
   }
 
-  set_terrain_fn(fn) {
-    terrain_fn = fn;
+  set_terrain_generator(fn) {
+    terrain_generator = fn;
+    this.update_adjacent_chunks(world_xyz_to_chunk_id(this.controller.get_position() as [number, number, number]));
   }
 
-  get_focused_voxel() {
+  get_focused_voxel_position() {
     return this.focused_voxel_world_xyz[FocusMode[this.focus_mode]];
   }
 
@@ -394,5 +400,34 @@ export class Stage3d {
       this.chunk_data[chunk_id] = gen_terrain(chunk_xyz_to_world_xyz(position));
     }
     this.changes.set(set_voxel(position, material, this.chunk_data), true);
+  }
+
+  util = util;
+
+  reset_chunks() {
+    Object.keys(this.rendered_chunks).forEach(i => {
+      this.remove_chunk(chunk_id_to_chunk_xyz(i));
+      this.scene.remove(this.scene.getObjectByName(i));
+    });
+    this.changes = new Map();
+    this.chunk_data = {};
+    this.chunk_mesh_status = {};
+  }
+
+  reset = () => {
+    this.reset_chunks();
+    Object.keys(this.entities).forEach(i => this.scene.remove(this.entities[i].get_obj()));
+    this.entities = {};
+    util.set_g(config.G);
+    this.controller.rotate_to([0, 0, 0]);
+  }
+
+  set_camera_distance(d) {
+    this.camera.position.z = d;
+  }
+
+  set_camera_fov(fov) {
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
   }
 }

@@ -6,7 +6,7 @@ export function str_to_dom(str: string) {
 export function flatten(arr) {
   const res = [];
   for (let i = 0; i < arr.length; ++i) {
-    if (arr[i].length) { // isArray
+    if (Array.isArray(arr[i])) {
       res.push(...arr[i]);
     } else {
       res.push(arr[i]);
@@ -41,4 +41,12 @@ export const deep_clone = (a) => {
 
 export const int_to_rgba = (a) => {
   return [24, 16, 8, 0].map(i => (a >> i) & 0xff);
+};
+
+export const save_to_file = (filename, content, content_type = 'text/plain') => {
+  const a = document.createElement('a');
+  const file = new Blob([content], { type: content_type });
+  a.href = URL.createObjectURL(file);
+  a.download = filename;
+  a.click();
 };

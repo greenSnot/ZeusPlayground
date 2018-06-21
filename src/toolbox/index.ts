@@ -59,21 +59,6 @@ const init_categories = (c: {[name: string]: {[type: string]: {brick_def: Brick}
 };
 
 const bricks_bundle = map_child(categories, 'bricks');
-export const bricks_fn = Object.keys(bricks_bundle).reduce(
-  (m, category) => {
-    const bundles = bricks_bundle[category];
-    Object.keys(bundles).forEach(i => {
-      m[i] = bundles[i].fn;
-      if (bundles[i].child_fns) {
-        Object.keys(bundles[i].child_fns).forEach(j => {
-          m[j] = bundles[i].child_fns[j];
-        });
-      }
-    });
-    return m;
-  },
-  {},
-);
 
 export const type_to_code = Object.keys(bricks_bundle).reduce(
   (m, category) => {

@@ -1,6 +1,3 @@
-/**
- * @author mrdoob / http://mrdoob.com/
- */
 import THREE from './engine';
 
 import {
@@ -11,13 +8,11 @@ import {
 export default class Controller {
   enabled = false;
 
-  pitchObject = new THREE.Object3D();
-  yawObject = new THREE.Object3D();
+  obj = new THREE.Object3D();
 
   direction = new THREE.Vector3(0, 0, -1);
-  rotation = new THREE.Euler(0, 0, 0, 'YXZ');
 
-  private chunk_id;
+  private chunk_id = '0,0,0';
 
   get_chunk_data: Function;
   notify_update_adjacent_chunks: Function;
@@ -27,10 +22,9 @@ export default class Controller {
 
     camera.rotation.set(0, 0, 0);
 
-    this.pitchObject.add(camera);
-
-    this.yawObject.position.copy(position);
-    this.yawObject.add(this.pitchObject);
+    this.obj.position.copy(position);
+    this.obj.add(camera);
+    this.obj.rotation.reorder('YXZ');
 
     document.addEventListener('mousemove', this.onMouseMove, false);
   }
@@ -44,21 +38,20 @@ export default class Controller {
     const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
     const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
 
-    this.yawObject.rotation.y -= movementX * 0.002;
-    this.pitchObject.rotation.x -= movementY * 0.002;
+    this.obj.rotation.y -= movementX * 0.002;
+    this.obj.rotation.x -= movementY * 0.002;
 
-    this.pitchObject.rotation.x = Math.max(- PI_2, Math.min(PI_2, this.pitchObject.rotation.x));
+    this.obj.rotation.x = Math.max(- PI_2, Math.min(PI_2, this.obj.rotation.x));
   }
 
-  getDirection = (rx = 0, ry = 0) => {
-    // assumes the camera itself is not rotated
-    this.rotation.set(this.pitchObject.rotation.x + rx, this.yawObject.rotation.y + ry, 0);
-    this.direction.set(0, 0, -1).applyEuler(this.rotation);
+  get_direction = (rx = 0, ry = 0, rz = 0) => {
+    const rotation = (new THREE.Euler()).reorder('YXZ').set(this.obj.rotation.x + rx, this.obj.rotation.y + ry, this.obj.rotation.z + rz);
+    this.direction.set(0, 0, -1).applyEuler(rotation);
     return this.direction;
   }
 
-  getObject = () => {
-    return this.yawObject;
+  get_obj = () => {
+    return this.obj;
   }
 
   dispose = () => {
@@ -67,18 +60,24 @@ export default class Controller {
 
   get_rotation() {
     return [
-      this.yawObject.rotation.x,
-      this.yawObject.rotation.y,
-      this.pitchObject.rotation.z,
+      this.obj.rotation.x,
+      this.obj.rotation.y,
+      this.obj.rotation.z,
     ];
   }
 
-  get_position() {
-    return this.yawObject.position.toArray();
+  get_position(): number[] {
+    return this.obj.position.toArray();
+  }
+
+  rotate_to(v) {
+    this.obj.rotation.x = v[0];
+    this.obj.rotation.y = v[1];
+    this.obj.rotation.z = v[2];
   }
 
   update = () => {
-    const chunk_id = world_xyz_to_chunk_id(this.yawObject.position.toArray() as WORLD_XYZ);
+    const chunk_id = world_xyz_to_chunk_id(this.obj.position.toArray() as WORLD_XYZ);
     if (this.chunk_id !== chunk_id) {
       this.notify_update_adjacent_chunks(chunk_id);
       this.chunk_id = chunk_id;
