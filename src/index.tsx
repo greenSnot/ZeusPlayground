@@ -3,18 +3,17 @@ import ReactDOM from 'react-dom';
 import { config } from './config';
 import { Stage3d } from './stage_3d';
 
-import injectTapEventPlugin from 'react-tap-event-plugin';
-injectTapEventPlugin();
-
 import { Brick, Workspace } from 'froggy';
-import { compile, Interpreter } from 'froggy-interpreter';
+import { compile } from 'froggy-interpreter';
 
-import { atomic_button_fns, atomic_dropdown_menu, bricks_fn, toolbox, type_to_code } from './toolbox';
+import { atomic_button_fns, atomic_dropdown_menu, toolbox, type_to_code } from './toolbox';
 
 import * as runtime_mgr from './runtime_mgr';
 
 import './styles/index.less';
 import styles from './styles/index.less';
+
+import { save_to_file } from './util';
 
 let stage: Stage3d;
 
@@ -24,6 +23,12 @@ const save_to_localstorage = (bricks: Brick[]) => {
 };
 const localstorage_root_bricks = JSON.parse(localStorage.getItem(storage_key) || '[]');
 
+const demos = [
+  'enderman',
+  'roller_coaster',
+  'big_wheel',
+  'flight_simulator',
+];
 type Props = {
   root_bricks: any,
   atomic_button_fns: any,
@@ -43,6 +48,13 @@ class Main extends React.Component<Props, State> {
     this.state.atomic_dropdown_menu = p.atomic_dropdown_menu;
     this.state.toolbox = p.toolbox;
     this.state.workspace_version = 0;
+  }
+  componentDidMount() {
+    if (localstorage_root_bricks.length === 0) {
+      import(`../test/${demos[0]}.json`).then(res => {
+        this.setState({ root_bricks: res.default, workspace_version: this.state.workspace_version + 1 });
+      });
+    }
   }
   render() {
     return (<React.Fragment>
@@ -64,26 +76,54 @@ class Main extends React.Component<Props, State> {
               const global_variables = {
                 $runtime_mgr: runtime_mgr,
               };
-              const compiled_bricks = compile(this.state.root_bricks, {
-                global_variables,
-                type_to_code,
-              });
-              global_variables['$procedure_terrain_fn'] && stage.set_terrain_fn(global_variables['$procedure_terrain_fn']);
-              console.log(compiled_bricks);
-              Object.keys(global_variables).forEach(i => console.log(global_variables[i]));
+              const codes = compile(this.state.root_bricks, type_to_code).codes;
+              (new Function('global', codes))(global_variables);
 
-              runtime_mgr.init(bricks_fn, compiled_bricks.procedures, compiled_bricks.events);
               runtime_mgr.start(global_variables);
-              stage.start(() => {
-                this.setState({ running: false });
-                runtime_mgr.stop();
-              });
+              stage.start(
+                () => {
+                  this.setState({ running: false });
+                  runtime_mgr.stop();
+                },
+                () => runtime_mgr.is_running,
+              );
             } else {
               runtime_mgr.stop();
             }
             this.setState({ running });
           }}
         />
+        <input className={styles.btnOpen} onChange={(e) => {
+          const file = e.currentTarget.files[0];
+          const reader = new FileReader();
+          reader.onload = () => {
+            stage.reset();
+            this.setState({
+              root_bricks: JSON.parse(reader.result),
+              workspace_version: this.state.workspace_version + 1,
+            });
+          };
+          reader.readAsText(file);
+        }} type="file"/>
+        <button className={styles.btnSave} onClick={() => save_to_file('bricks.json', JSON.stringify(this.state.root_bricks))}>save as</button>
+        <select
+          className={styles.demoSelect}
+          onChange={(e) => {
+            const name = e.target.value;
+            import(`../test/${name}.json`).then(res => {
+              stage.reset();
+              this.setState({ root_bricks: res.default, workspace_version: this.state.workspace_version + 1 });
+            });
+          }}
+        >
+          {[
+            '----load demo----',
+            ...demos,
+          ].map(i => (
+            <option key={i} value={i}>{i}</option>
+          ))}
+        </select>
+        <iframe src="https://ghbtns.com/github-btn.html?user=greenSnot&repo=ZeusPlayground&type=star&size=large" className={styles.github} frameBorder="0" scrolling="0" width="80px" height="30px"></iframe>
       </div>
       <div id="stage-wrap" className={`${styles.stageWrap} ${this.state.running ? styles.active : ''}`} >
         <div id="stage-3d" className={styles.stage}>

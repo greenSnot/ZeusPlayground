@@ -1,14 +1,9 @@
 import { gen_id, Brick, BrickOutput } from 'froggy';
 import { atomicButtonAdd, atomicButtonRemove } from './styles/button.less';
 
-import { Interpreter } from 'froggy-interpreter';
-import * as runtime_mgr from '../runtime_mgr';
-
 const bricks: {
   [type: string]: {
     brick_def: Brick,
-    child_fns?: {[type: string]: Function},
-    fn: Function,
     to_code: Function,
     child_to_code?: {[type: string]: Function},
   },
@@ -59,53 +54,24 @@ const bricks: {
         show_hat: true,
       },
     },
-    fn: () => {},
-    child_fns: {
-      procedure: (interpreter: Interpreter, inputs_result) => {
-        const runtime_data = interpreter.get_brick_runtime_data();
-        if (!runtime_data.evaluation_times) {
-          runtime_data.evaluation_times++;
-          if (interpreter.procedures[interpreter.self.procedure_name].optimized_fn) {
-            interpreter.procedure_result = interpreter.procedures[interpreter.self.procedure_name].optimized_fn(runtime_mgr.get_global_variables(), ...inputs_result);
-            return;
-          }
-          interpreter.step_into_procedure(interpreter.self.procedure_name, inputs_result);
-        } else {
-          return interpreter.procedure_result;
-        }
-      },
-      procedure_with_output: (interpreter: Interpreter, inputs_result) => {
-        const runtime_data = interpreter.get_brick_runtime_data();
-        if (!runtime_data.evaluation_times) {
-          runtime_data.evaluation_times++;
-          if (interpreter.procedures[interpreter.self.procedure_name].optimized_fn) {
-            interpreter.procedure_result = interpreter.procedures[interpreter.self.procedure_name].optimized_fn(runtime_mgr.get_global_variables(), ...inputs_result);
-            return;
-          }
-          interpreter.step_into_procedure(interpreter.self.procedure_name, inputs_result);
-        } else {
-          return interpreter.procedure_result;
-        }
-      },
-      atomic_param: (interpreter: Interpreter) => {
-        return interpreter.get_params()[interpreter.self.computed];
-      },
-    },
     child_to_code: {
-      procedure: (brick, o) => {
-        const inputs = ['global'].concat(brick.inputs.map(i => `(${o.brick_to_code(i)})`)).join(',');
-        return `global.$procedure_${brick.procedure_name}(${inputs});`;
+      procedure: (brick, util) => {
+        const inputs = ['global'].concat(brick.inputs.map(i => `(${util.brick_to_code(i)})`)).join(',');
+        return `
+          ${util.has_blocking_brick[brick.procedure_name] ? 'await' : ''} global.$procedure_${brick.procedure_name}(${inputs});
+          ${util.brick_to_code(brick.next)}
+        `;
       },
-      procedure_with_output: (brick, o) => {
-        const inputs = ['global'].concat(brick.inputs.map(i => `(${o.brick_to_code(i)})`)).join(',');
-        return `global.$procedure_${brick.procedure_name}(${inputs})`;
+      procedure_with_output: (brick, util) => {
+        const inputs = ['global'].concat(brick.inputs.map(i => `(${util.brick_to_code(i)})`)).join(',');
+        return `${util.has_blocking_brick[brick.procedure_name] ? 'await' : ''} global.$procedure_${brick.procedure_name}(${inputs})`;
       },
       atomic_param: (brick) => brick.computed,
     },
-    to_code: (brick, o) => {
+    to_code: (brick, util) => {
       return `
-        global.$procedure_${brick.procedure_name} = function(${['global'].concat(brick.params).join(',')}) {
-          ${o.brick_to_code(brick.next)}
+        global.$procedure_${brick.procedure_name} = ${util.has_blocking_brick[brick.procedure_name] ? 'async' : ''} function(${['global'].concat(brick.params).join(',')}) {
+          ${util.brick_to_code(brick.next)}
         };
       `;
     },
@@ -123,9 +89,6 @@ const bricks: {
         output: BrickOutput.any,
         inputs: [],
       }],
-    },
-    fn: (interpreter: Interpreter, [res]) => {
-      interpreter.procedure_return(res);
     },
     to_code: (brick, o) => `return (${o.brick_to_code(brick.inputs[0])});`,
   },

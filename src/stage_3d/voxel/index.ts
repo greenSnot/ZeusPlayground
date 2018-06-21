@@ -88,6 +88,9 @@ build_ao_map_kinds();
  * ]
  */
 
+ /**
+  * zzzyyyxxx -> [x, y, z]
+  */
 export const voxel_index_to_voxel_xyz = (idx) => ([
   idx & CHUNK_SIZE_MASK,
   (idx & CHUNK_SIZE_SQUARE_MASK) >> CHUNK_SIZE_BITS,
@@ -149,34 +152,34 @@ export const ao_culled = (chunk, enable_ao = true) => {
   const uvs = new Float32Array(n_max_faces * 4 * 2);
   let uvs_index = 0;
   const face_to_ignore = {
-    x: 14,
+    x: 22,
     y: 16,
-    z: 22,
-    '-x': 12,
+    z: 14,
+    '-x': 4,
     '-y': 10,
-    '-z': 4,
+    '-z': 12,
   };
   Object.keys(face_to_ignore).forEach(i => {
     face_to_ignore[i] = 1 << face_to_ignore[i];
   });
   const face_vertice_color = {
     x: [
-      [11, 20],
-      [5, 8, 17],
-      [17, 23, 26],
-      [2, 11],
+      [19, 20],
+      [21, 24, 25],
+      [23, 25, 26],
+      [18, 19],
     ],
     y: [
       [6, 7, 15],
       [17, 26, 25],
-      [7, 8, 17],
       [15, 24, 25],
+      [7, 8, 17],
     ],
     z: [
-      [18, 19],
-      [23, 25, 26],
-      [21, 24, 25],
-      [19, 20],
+      [11, 20],
+      [17, 23, 26],
+      [5, 8, 17],
+      [2, 11],
     ],
   };
   Object.keys(face_vertice_color).forEach(i => {
@@ -189,10 +192,9 @@ export const ao_culled = (chunk, enable_ao = true) => {
   face_vertice_color['-z'] = [-1, -1, -1, -1];
 
   const faces = Object.keys(face_vertice_color);
-  chunk.forEach((v, i) => {
-    if (!v) {
-      return;
-    }
+  let last_mask;
+  for (let i = 0; i < chunk.length; ++i) {
+    const v = chunk[i];
     const [x, y, z] = voxel_index_to_voxel_xyz(i);
 
     /**
@@ -203,15 +205,33 @@ export const ao_culled = (chunk, enable_ao = true) => {
      */
     let mask = 0;
     const in_range = (t) => t >= 0 && t < CHUNK_SIZE;
-    for (let a = -1, t = 0; a < 2; ++a) {
-      for (let b = -1; b < 2; ++b) {
-        for (let c = -1; c < 2; ++c, ++t) {
-          if (!in_range(x + c) || !in_range(y + b) || !in_range(z + a)) {
-            continue;
+    const in_edge = (t) => t === 0 || t === CHUNK_SIZE - 1;
+    const needs_check_outlier = in_edge(x) || in_edge(y) || in_edge(z);
+    if (x === 0) {
+      for (let a = -1, t = 0; a < 2; ++a) {
+        for (let b = -1; b < 2; ++b) {
+          for (let c = -1; c < 2; ++c, ++t) {
+            if (needs_check_outlier && (!in_range(x + a) || !in_range(y + b) || !in_range(z + c))) {
+              continue;
+            }
+            mask = mask | ((chunk[voxel_xyz_to_voxel_index([x + a, y + b, z + c])] ? 1 : 0) << t);
           }
-          mask = mask | ((chunk[voxel_xyz_to_voxel_index([x + c, y + b, z + a])] ? 1 : 0) << t);
         }
       }
+    } else {
+      mask = last_mask >> 9;
+      for (let b = -1, t = 18; b < 2; ++b) {
+        for (let c = -1; c < 2; ++c, ++t) {
+          if (needs_check_outlier && (!in_range(x + 1) || !in_range(y + b) || !in_range(z + c))) {
+            continue;
+          }
+          mask = mask | ((chunk[voxel_xyz_to_voxel_index([x + 1, y + b, z + c])] ? 1 : 0) << t);
+        }
+      }
+    }
+    last_mask = mask;
+    if (!v) {
+      continue;
     }
 
     const offset = [x, y, z].map(j => j * VOXEL_WIDTH + VOXEL_WIDTH / 2);
@@ -234,7 +254,7 @@ export const ao_culled = (chunk, enable_ao = true) => {
         colors[colors_index++] = j;
       });
     });
-  });
+  }
   return [
     [vertex_pos, vertex_pos_index],
     [colors, enable_ao ? colors_index : vertex_pos_index ],

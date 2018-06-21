@@ -6,3 +6,7 @@ export const active: string;
 export const stage: string;
 export const stageDebug: string;
 export const stageCross: string;
+export const demoSelect: string;
+export const btnSave: string;
+export const github: string;
+export const btnOpen: string;

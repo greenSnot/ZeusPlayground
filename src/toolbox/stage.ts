@@ -4,6 +4,14 @@ import { deep_clone } from '../util';
 
 import * as runtime_mgr from '../runtime_mgr';
 
+const rotation_order = [
+  'XYZ',
+  'XZY',
+  'YXZ',
+  'YZX',
+  'ZXY',
+  'ZYX',
+];
 const vector3_def = {
   type: 'stage_3d_vector3',
   output: BrickOutput.array,
@@ -17,11 +25,9 @@ const vector3_def = {
     {
       type: 'container',
       output: BrickOutput.number,
-      is_static: true,
       inputs: [{
         type: 'atomic_input_number',
         output: BrickOutput.number,
-        is_static: true,
         ui: {
           value: 1,
         },
@@ -36,11 +42,9 @@ const vector3_def = {
     {
       type: 'container',
       output: BrickOutput.number,
-      is_static: true,
       inputs: [{
         type: 'atomic_input_number',
         output: BrickOutput.number,
-        is_static: true,
         ui: {
           value: 0,
         },
@@ -55,11 +59,9 @@ const vector3_def = {
     {
       type: 'container',
       output: BrickOutput.number,
-      is_static: true,
       inputs: [{
         type: 'atomic_input_number',
         output: BrickOutput.number,
-        is_static: true,
         ui: {
           value: 0,
         },
@@ -68,13 +70,13 @@ const vector3_def = {
   ],
 };
 
-const puppet_def = {
-  type: 'stage_3d_get_puppet',
+const entity_def = {
+  type: 'stage_3d_get_entity',
   output: BrickOutput.any,
   inputs: [{
     type: 'atomic_text',
     ui: {
-      value: 'puppet',
+      value: 'entity',
     },
   }, {
     type: 'container',
@@ -115,19 +117,320 @@ const material_def = {
 const bricks: {
   [type: string]: {
     brick_def: Brick,
-    child_fns?: {[type: string]: Function},
     to_code: Function,
-    fn: Function,
   },
 } = {
   stage_3d_vector3: {
     brick_def: vector3_def,
-    fn: (i, vector) => vector,
     to_code: (brick, o) => `[${o.brick_to_code(brick.inputs[0])},${o.brick_to_code(brick.inputs[1])},${o.brick_to_code(brick.inputs[2])}]`,
   },
-  stage_3d_puppet_change_velocity: {
+  stage_3d_operator_vector3: {
     brick_def: {
-      type: 'stage_3d_puppet_change_velocity',
+      type: 'stage_3d_operator_vector3',
+      output: BrickOutput.array,
+      inputs: [
+        {
+          type: 'container',
+          output: BrickOutput.array,
+          inputs: [],
+        },
+        {
+          type: 'container',
+          output: BrickOutput.number,
+          is_static: true,
+          inputs: [{
+            type: 'atomic_dropdown',
+            is_static: true,
+            output: BrickOutput.number,
+            ui: {
+              value: 1,
+              dropdown: 'operator_vector3_dropdown',
+            },
+          }],
+        },
+        {
+          type: 'container',
+          output: BrickOutput.array,
+          inputs: [deep_clone(vector3_def)],
+        },
+      ],
+    },
+    to_code: (brick, u) => {
+      const operator_id = brick.inputs[1].computed;
+      const operator = ['*', '+'][operator_id];
+      return `(() => {
+        let $temp = ${u.brick_to_code(brick.inputs[2])};
+        return ${u.brick_to_code(brick.inputs[0])}.map((i, j) => i ${operator} $temp[j]);
+      })()`;
+    }
+  },
+  stage_3d_vector_apply_rotation: {
+    brick_def: {
+      type: 'stage_3d_vector_apply_rotation',
+      output: BrickOutput.array,
+      inputs: [
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'vector',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.array,
+          inputs: [deep_clone(vector3_def)],
+        },
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'apply rotation',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.array,
+          inputs: [deep_clone(vector3_def)],
+        },
+        {
+          type: 'container',
+          output: BrickOutput.number,
+          is_static: true,
+          inputs: [{
+            type: 'atomic_dropdown',
+            is_static: true,
+            output: BrickOutput.number,
+            ui: {
+              value: 1,
+              dropdown: 'rotation_order',
+            },
+          }],
+        },
+      ],
+    },
+    to_code: (brick, u) => {
+      const order = rotation_order[brick.inputs[2].computed];
+      return `global.$runtime_mgr.stage.util.vector_apply_rotation(${u.brick_to_code(brick.inputs[0])}, ${u.brick_to_code(brick.inputs[1])}, '${order}')`;
+    },
+  },
+  stage_3d_convert_rotation: {
+    brick_def: {
+      type: 'stage_3d_convert_rotation',
+      output: BrickOutput.array,
+      inputs: [
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'convert rotation',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.array,
+          inputs: [deep_clone(vector3_def)],
+        },
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'from',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.number,
+          is_static: true,
+          inputs: [{
+            type: 'atomic_dropdown',
+            is_static: true,
+            output: BrickOutput.number,
+            ui: {
+              value: 1,
+              dropdown: 'rotation_order',
+            },
+          }],
+        },
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'to',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.number,
+          is_static: true,
+          inputs: [{
+            type: 'atomic_dropdown',
+            is_static: true,
+            output: BrickOutput.number,
+            ui: {
+              value: 2,
+              dropdown: 'rotation_order',
+            },
+          }],
+        },
+      ],
+    },
+    to_code: (brick, u) => {
+      const order_a = rotation_order[brick.inputs[1].computed];
+      const order_b = rotation_order[brick.inputs[2].computed];
+      return `global.$runtime_mgr.stage.util.convert_rotation(${u.brick_to_code(brick.inputs[0])}, '${order_a}', '${order_b}')`;
+    }
+  },
+  stage_3d_get_focused_voxel_position: {
+    brick_def: {
+      type: 'stage_3d_get_focused_voxel_position',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'focused voxel\'s position',
+        },
+      }],
+    },
+    to_code: (brick, o) => '(global.$runtime_mgr.stage.get_focused_voxel_position())',
+  },
+  stage_3d_controller_get_rotation: {
+    brick_def: {
+      type: 'stage_3d_controller_get_rotation',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'controller\'s rotation',
+        },
+      }],
+    },
+    to_code: (brick, o) => 'global.$runtime_mgr.stage.controller.get_rotation()',
+  },
+  stage_3d_controller_get_position: {
+    brick_def: {
+      type: 'stage_3d_controller_get_position',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'controller\'s position',
+        },
+      }],
+    },
+    to_code: (brick, o) => 'global.$runtime_mgr.stage.controller.get_position()',
+  },
+  stage_3d_get_entity_position: {
+    brick_def: {
+      type: 'stage_3d_get_entity_position',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: `'s position`,
+        },
+      }],
+    },
+    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}.get_position()`,
+  },
+  stage_3d_get_entity_world_rotation: {
+    brick_def: {
+      type: 'stage_3d_get_entity_world_rotation',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: `'s world rotation`,
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.number,
+        is_static: true,
+        inputs: [{
+          type: 'atomic_dropdown',
+          is_static: true,
+          output: BrickOutput.number,
+          ui: {
+            value: 1,
+            dropdown: 'rotation_order',
+          },
+        }],
+      }],
+    },
+    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}.get_world_rotation('${rotation_order[brick.inputs[1].computed]}')`,
+  },
+  stage_3d_get_entity_world_position: {
+    brick_def: {
+      type: 'stage_3d_get_entity_world_position',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: `'s world position`,
+        },
+      }],
+    },
+    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}.get_world_position()`,
+  },
+  stage_3d_get_entity_rotation: {
+    brick_def: {
+      type: 'stage_3d_get_entity_rotation',
+      output: BrickOutput.array,
+      inputs: [{
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: `'s rotation`,
+        },
+      }],
+    },
+    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}.get_rotation()`,
+  },
+  stage_3d_entity_set_velocity: {
+    brick_def: {
+      type: 'stage_3d_entity_set_velocity',
+      is_root: true,
+      inputs: [
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'set',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.any,
+          inputs: [deep_clone(entity_def)],
+        },
+        {
+          type: 'atomic_text',
+          ui: {
+            value: 'velocity',
+          },
+        },
+        {
+          type: 'container',
+          output: BrickOutput.array,
+          inputs: [deep_clone(vector3_def)],
+        },
+      ],
+      next: null,
+    },
+    to_code: (brick, o) => `(${o.brick_to_code(brick.inputs[0])}).set_velocity(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
+  },
+  stage_3d_entity_change_velocity: {
+    brick_def: {
+      type: 'stage_3d_entity_change_velocity',
       is_root: true,
       inputs: [
         {
@@ -139,7 +442,7 @@ const bricks: {
         {
           type: 'container',
           output: BrickOutput.any,
-          inputs: [deep_clone(puppet_def)],
+          inputs: [deep_clone(entity_def)],
         },
         {
           type: 'atomic_text',
@@ -155,15 +458,11 @@ const bricks: {
       ],
       next: null,
     },
-    fn: (i, [p, v]) => {
-      p.change_velocity(v);
-    },
     to_code: (brick, o) => `(${o.brick_to_code(brick.inputs[0])}).change_velocity(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
   },
   stage_3d_material: {
     brick_def: material_def,
-    fn: (i, [v]) => v,
-    to_code: (brick, o) => brick.inputs[0].computed,
+    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}`,
   },
   stage_3d_set_focus_mode: {
     brick_def: {
@@ -189,22 +488,7 @@ const bricks: {
       }],
       next: null,
     },
-    fn: (i) => runtime_mgr.stage.set_focus_mode(i.self.inputs[0].computed),
     to_code: (brick, o) => `global.$runtime_mgr.stage.set_focus_mode(${brick.inputs[0].computed});${o.brick_to_code(brick.next)}`,
-  },
-  stage_3d_get_focused_voxel: {
-    brick_def: {
-      type: 'stage_3d_get_focused_voxel',
-      output: BrickOutput.array,
-      inputs: [{
-        type: 'atomic_text',
-        ui: {
-          value: 'focused voxel',
-        },
-      }],
-    },
-    fn: (i) => runtime_mgr.stage.get_focused_voxel(),
-    to_code: (brick, o) => '(global.$runtime_mgr.stage.get_focused_voxel())',
   },
   stage_3d_set_voxel: {
     brick_def: {
@@ -221,7 +505,7 @@ const bricks: {
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'by',
+          value: 'to',
         },
       }, {
         type: 'container',
@@ -230,64 +514,55 @@ const bricks: {
       }],
       next: null,
     },
-    fn: (i, [p, m]) => runtime_mgr.stage.set_voxel(p, m),
-    to_code: (brick, o) => `global.$runtime_mgr.stage.set_focused_voxel(${o.brick_to_code(brick.inputs[0])}, ${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
+    to_code: (brick, o) => `global.$runtime_mgr.stage.set_voxel(${o.brick_to_code(brick.inputs[0])}, ${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
   },
-  stage_3d_get_puppet: {
-    brick_def: puppet_def,
-    fn: (i, [id]) => {
-      return runtime_mgr.stage.puppets[id];
-    },
-    to_code: (brick, o) => `global.$runtime_mgr.stage.puppets[${o.brick_to_code(brick.inputs[0])}]`,
+  stage_3d_get_entity: {
+    brick_def: entity_def,
+    to_code: (brick, o) => `global.$runtime_mgr.stage.entities[${o.brick_to_code(brick.inputs[0])}]`,
   },
-  stage_3d_get_puppet_position: {
+  stage_3d_set_terrain_generator: {
     brick_def: {
-      type: 'stage_3d_get_puppet_position',
-      output: BrickOutput.array,
-      inputs: [{
-        type: 'container',
-        output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
-      }, {
-        type: 'atomic_text',
-        ui: {
-          value: `'s position`,
-        },
-      }],
-    },
-    fn: (i, [puppet]) => puppet.get_position(),
-    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}.get_position()`,
-  },
-  stage_3d_get_puppet_rotation: {
-    brick_def: {
-      type: 'stage_3d_get_puppet_rotation',
-      output: BrickOutput.array,
-      inputs: [{
-        type: 'container',
-        output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
-      }, {
-        type: 'atomic_text',
-        ui: {
-          value: `'s rotation`,
-        },
-      }],
-    },
-    fn: (i, [puppet]) => puppet.get_rotation(),
-    to_code: (brick, u) => `${u.brick_to_code(brick.inputs[0])}.get_rotation()`,
-  },
-  stage_3d_puppet_translate_by: {
-    brick_def: {
-      type: 'stage_3d_puppet_translate_by',
+      type: 'stage_3d_set_terrain_generator',
       next: null,
       inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set terrain generator',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.string,
+        inputs: [{
+          type: 'atomic_input_string',
+          output: BrickOutput.string,
+          ui: {
+            value: 'terrain_generator',
+          }
+        }],
+      }],
+    },
+    to_code: (brick, u) => `
+      global.$runtime_mgr.stage.set_terrain_generator(global.$runtime_mgr.get_global_variable('$procedure_' + ${u.brick_to_code(brick.inputs[0])}));
+      ${u.brick_to_code(brick.next)};
+    `,
+  },
+  stage_3d_translate_entity_by: {
+    brick_def: {
+      type: 'stage_3d_translate_entity_by',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'translate',
+        },
+      }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'translate by',
+          value: 'by',
         },
       }, {
         type: 'container',
@@ -295,24 +570,28 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: (i, [puppet, v]) => puppet.translate_by(v),
     to_code: (brick, u) => `
       ${u.brick_to_code(brick.inputs[0])}.translate_by(${u.brick_to_code(brick.inputs[1])});
       ${u.brick_to_code(brick.next)};
     `,
   },
-  stage_3d_puppet_translate_local_by: {
+  stage_3d_translate_entity_by_local: {
     brick_def: {
-      type: 'stage_3d_puppet_translate_local_by',
+      type: 'stage_3d_translate_entity_by_local',
       next: null,
       inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'translate',
+        },
+      }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'translate local by',
+          value: 'by local',
         },
       }, {
         type: 'container',
@@ -320,15 +599,14 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: (i, [puppet, v]) => puppet.translate_local_by(v),
     to_code: (brick, u) => `
-      ${u.brick_to_code(brick.inputs[0])}.translate_local_by(${u.brick_to_code(brick.inputs[1])});
+      ${u.brick_to_code(brick.inputs[0])}.translate_by_local(${u.brick_to_code(brick.inputs[1])});
       ${u.brick_to_code(brick.next)};
     `,
   },
-  stage_3d_rotate_puppet_by: {
+  stage_3d_rotate_entity_by: {
     brick_def: {
-      type: 'stage_3d_rotate_puppet_by',
+      type: 'stage_3d_rotate_entity_by',
       next: null,
       inputs: [{
         type: 'atomic_text',
@@ -338,7 +616,7 @@ const bricks: {
       }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
@@ -350,15 +628,14 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: (i, [puppet, v]) => puppet.rotate_by(v),
     to_code: (brick, u) => `
       ${u.brick_to_code(brick.inputs[0])}.rotate_by(${u.brick_to_code(brick.inputs[1])});
       ${u.brick_to_code(brick.next)};
     `,
   },
-  stage_3d_set_puppet_rotation_order: {
+  stage_3d_set_entity_rotation_order: {
     brick_def: {
-      type: 'stage_3d_set_puppet_rotation_order',
+      type: 'stage_3d_set_entity_rotation_order',
       next: null,
       inputs: [{
         type: 'atomic_text',
@@ -368,7 +645,7 @@ const bricks: {
       }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
@@ -389,17 +666,22 @@ const bricks: {
         }],
       }],
     },
-    fn: () => {},
-    to_code: () => {},
+    to_code: (brick, u) => {
+      const order = rotation_order[brick.inputs[1].computed];
+      return `
+        ${u.brick_to_code(brick.inputs[0])}.set_rotation_order('${order}');
+        ${u.brick_to_code(brick.next)}
+      `;
+    },
   },
-  stage_3d_init_puppet: {
+  stage_3d_init_entity: {
     brick_def: {
-      type: 'stage_3d_init_puppet',
+      type: 'stage_3d_init_entity',
       next: null,
       inputs: [{
         type: 'atomic_text',
         ui: {
-          value: 'init puppet',
+          value: 'init entity',
         },
       }, {
         type: 'container',
@@ -422,23 +704,122 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: (i: Interpreter, [id, v]) => {
-      runtime_mgr.stage.init_puppet(id, v);
-    },
-    to_code: (brick, o) => `global.$runtime_mgr.stage.init_puppet(${o.brick_to_code(brick.inputs[0])},${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
+    to_code: (brick, o) => `global.$runtime_mgr.stage.init_entity(${o.brick_to_code(brick.inputs[0])},${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
   },
-  stage_3d_puppet_set_mass: {
+  stage_3d_set_entity_collidable: {
     brick_def: {
-      type: 'stage_3d_puppet_set_mass',
+      type: 'stage_3d_set_entity_collidable',
       next: null,
       inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set',
+        },
+      }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'set mass',
+          value: 'collidable',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.boolean,
+        inputs: [{
+          type: 'atomic_boolean',
+          output: BrickOutput.boolean,
+          ui: {
+            value: true,
+            dropdown: 'atomic_boolean_dropdown',
+          },
+        }],
+      }],
+    },
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.collidable = ${o.brick_to_code(brick.inputs[1])};${o.brick_to_code(brick.next)}`,
+  },
+  stage_3d_set_entity_air_friction: {
+    brick_def: {
+      type: 'stage_3d_set_entity_air_friction',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: 'air friction',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.number,
+        inputs: [{
+          type: 'atomic_input_number',
+          output: BrickOutput.number,
+          ui: {
+            value: 0.08,
+          },
+        }],
+      }],
+    },
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.air_friction = ${o.brick_to_code(brick.inputs[1])};${o.brick_to_code(brick.next)}`,
+  },
+  stage_3d_set_entity_friction: {
+    brick_def: {
+      type: 'stage_3d_set_entity_friction',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: 'friction',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.number,
+        inputs: [{
+          type: 'atomic_input_number',
+          output: BrickOutput.number,
+          ui: {
+            value: 0.08,
+          },
+        }],
+      }],
+    },
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.friction = ${o.brick_to_code(brick.inputs[1])};${o.brick_to_code(brick.next)}`,
+  },
+  stage_3d_set_entity_mass: {
+    brick_def: {
+      type: 'stage_3d_set_entity_mass',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: 'mass',
         },
       }, {
         type: 'container',
@@ -452,23 +833,51 @@ const bricks: {
         }],
       }],
     },
-    fn: (i, [puppet]) => {
-      puppet.mass = i.self.inputs[1].computed;
-    },
     to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.mass = ${o.brick_to_code(brick.inputs[1])};${o.brick_to_code(brick.next)}`,
   },
-  stage_3d_puppet_set_position: {
+  stage_3d_set_g: {
     brick_def: {
-      type: 'stage_3d_puppet_set_position',
+      type: 'stage_3d_set_g',
       next: null,
       inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set G',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.number,
+        inputs: [{
+          type: 'atomic_input_number',
+          output: BrickOutput.number,
+          ui: {
+            value: 9.806,
+          },
+        }],
+      }],
+    },
+    to_code: (brick, o) => `
+      global.$runtime_mgr.stage.util.set_g(${o.brick_to_code(brick.inputs[0])});
+      ${o.brick_to_code(brick.next)}
+    `,
+  },
+  stage_3d_translate_entity_to: {
+    brick_def: {
+      type: 'stage_3d_translate_entity_to',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'translate',
+        },
+      }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'set position',
+          value: 'to',
         },
       }, {
         type: 'container',
@@ -476,42 +885,25 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: (i, [puppet, v]) => {
-      puppet.set_position(v);
-    },
-    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.set_position(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.translate_to(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
   },
-  stage_3d_puppet_set_rotation: {
+  stage_3d_rotate_entity_to: {
     brick_def: {
-      type: 'stage_3d_puppet_set_rotation',
+      type: 'stage_3d_rotate_entity_to',
       next: null,
       inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'rotate',
+        },
+      }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'set rotation',
-        },
-      }, {
-        type: 'container',
-        output: BrickOutput.array,
-        inputs: [deep_clone(vector3_def)],
-      }],
-    },
-    fn: (i, [puppet, v]) => {
-      puppet.set_rotation(v);
-    },
-    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.set_rotation(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
-  },
-  stage_3d_controller_set_rotation: {
-    brick_def: {
-      type: 'stage_3d_controller_set_rotation',
-      inputs: [{
-        type: 'atomic_text',
-        ui: {
-          value: 'controller set rotation',
+          value: 'to',
         },
       }, {
         type: 'container',
@@ -519,51 +911,16 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: () => {
-      // TODO
-    },
-    to_code: (brick, o) => '',
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.rotate_to(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
   },
-  stage_3d_controller_get_rotation: {
+  stage_3d_rotate_controller_to: {
     brick_def: {
-      type: 'stage_3d_controller_get_rotation',
-      output: BrickOutput.array,
-      inputs: [{
-        type: 'atomic_text',
-        ui: {
-          value: 'controller rotation',
-        },
-      }],
-    },
-    fn: () => {
-      return runtime_mgr.stage.controller.get_rotation();
-    },
-    to_code: (brick, o) => 'global.$runtime_mgr.stage.controller.get_rotation()',
-  },
-  stage_3d_controller_get_position: {
-    brick_def: {
-      type: 'stage_3d_controller_get_position',
-      output: BrickOutput.array,
-      inputs: [{
-        type: 'atomic_text',
-        ui: {
-          value: 'controller position',
-        },
-      }],
-    },
-    fn: () => {
-      return runtime_mgr.stage.controller.get_position();
-    },
-    to_code: (brick, o) => 'global.$runtime_mgr.stage.controller.get_position()',
-  },
-  stage_3d_controller_set_position: {
-    brick_def: {
-      type: 'stage_3d_controller_set_position',
+      type: 'stage_3d_rotate_controller_to',
       next: null,
       inputs: [{
         type: 'atomic_text',
         ui: {
-          value: 'controller set position',
+          value: 'rotate controller to',
         },
       }, {
         type: 'container',
@@ -571,23 +928,104 @@ const bricks: {
         inputs: [deep_clone(vector3_def)],
       }],
     },
-    fn: (i, [v]) => {
-      runtime_mgr.stage.controller.getObject().position.fromArray(v);
-    },
-    to_code: (brick, o) => `global.$runtime_mgr.stage.controller.getObject().position.fromArray(${o.brick_to_code(brick.inputs[0])});${o.brick_to_code(brick.next)}`,
+    to_code: (brick, u) => `
+      global.$runtime_mgr.stage.controller.rotate_to(${u.brick_to_code(brick.inputs[0])});
+      ${u.brick_to_code(brick.next)}
+    `,
   },
-  stage_3d_puppet_set_color: {
+  stage_3d_reset: {
     brick_def: {
-      type: 'stage_3d_puppet_set_color',
+      type: 'stage_3d_reset',
       next: null,
       inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'reset',
+        },
+      }],
+    },
+    to_code: (brick, util) => `global.$runtime_mgr.stage.reset();${util.brick_to_code(brick.next)}`,
+  },
+  stage_3d_set_camera_fov: {
+    brick_def: {
+      type: 'stage_3d_set_camera_fov',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set camera fov',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.number,
+        inputs: [{
+          type: 'atomic_input_number',
+          output: BrickOutput.number,
+          ui: {
+            value: 40,
+          }
+        }],
+      }],
+    },
+    to_code: (brick, util) => `global.$runtime_mgr.stage.set_camera_fov(${util.brick_to_code(brick.inputs[0])});${util.brick_to_code(brick.next)}`,
+  },
+  stage_3d_set_camera_distance: {
+    brick_def: {
+      type: 'stage_3d_set_camera_distance',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set camera distance',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.number,
+        inputs: [{
+          type: 'atomic_input_number',
+          output: BrickOutput.number,
+          ui: {
+            value: 1,
+          }
+        }],
+      }],
+    },
+    to_code: (brick, util) => `global.$runtime_mgr.stage.set_camera_distance(${util.brick_to_code(brick.inputs[0])});${util.brick_to_code(brick.next)}`,
+  },
+  stage_3d_translate_controller_to: {
+    brick_def: {
+      type: 'stage_3d_translate_controller_to',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'translate controller to',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.array,
+        inputs: [deep_clone(vector3_def)],
+      }],
+    },
+    to_code: (brick, o) => `global.$runtime_mgr.stage.controller.get_obj().position.fromArray(${o.brick_to_code(brick.inputs[0])});${o.brick_to_code(brick.next)}`,
+  },
+  stage_3d_set_entity_color: {
+    brick_def: {
+      type: 'stage_3d_set_entity_color',
+      next: null,
+      inputs: [{
+        type: 'atomic_text',
+        ui: {
+          value: 'set',
+        },
+      }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
-          value: 'set color',
+          value: 'color',
         },
       }, {
         type: 'container',
@@ -601,19 +1039,16 @@ const bricks: {
         }],
       }],
     },
-    fn: (i, [puppet, rgba]) => {
-      puppet.set_color(rgba);
-    },
     to_code: (brick, o) => `${o.brick_to_code(brick.inputs[0])}.set_color(${o.brick_to_code(brick.inputs[1])});${o.brick_to_code(brick.next)}`,
   },
-  stage_3d_puppet_add: {
+  stage_3d_entity_attach_to: {
     brick_def: {
-      type: 'stage_3d_puppet_add',
+      type: 'stage_3d_entity_attach_to',
       next: null,
       inputs: [{
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }, {
         type: 'atomic_text',
         ui: {
@@ -622,13 +1057,31 @@ const bricks: {
       }, {
         type: 'container',
         output: BrickOutput.any,
-        inputs: [deep_clone(puppet_def)],
+        inputs: [deep_clone(entity_def)],
       }],
     },
-    fn: (i, [puppet_a, puppet_b]) => {
-      puppet_b.add(puppet_a);
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[1])}.attach_to(${o.brick_to_code(brick.inputs[0])});${o.brick_to_code(brick.next)}`,
+  },
+  stage_3d_entity_detach_from: {
+    brick_def: {
+      type: 'stage_3d_entity_detach_from',
+      next: null,
+      inputs: [{
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }, {
+        type: 'atomic_text',
+        ui: {
+          value: 'detach from',
+        },
+      }, {
+        type: 'container',
+        output: BrickOutput.any,
+        inputs: [deep_clone(entity_def)],
+      }],
     },
-    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[1])}.add(${o.brick_to_code(brick.inputs[0])});${o.brick_to_code(brick.next)}`,
+    to_code: (brick, o) => `${o.brick_to_code(brick.inputs[1])}.detach_to(${o.brick_to_code(brick.inputs[0])});${o.brick_to_code(brick.next)}`,
   },
 };
 
@@ -642,13 +1095,13 @@ const atomic_dropdown_menu = {
     replacement: 1,
     placement: 2,
   },
-  rotation_order: {
-    XYZ: 1,
-    XZY: 2,
-    YXZ: 3,
-    YZX: 4,
-    ZXY: 5,
-    ZYX: 6,
+  rotation_order: rotation_order.reduce((m, i, index) => {
+    m[i] = index;
+    return m;
+  }, {}),
+  operator_vector3_dropdown: {
+    scale: 0,
+    translate: 1,
   },
 };
 export default {

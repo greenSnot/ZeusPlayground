@@ -18,7 +18,6 @@ const match_mouse_status = [
 const bricks: {
   [type: string]: {
     brick_def: Brick,
-    fn: Function,
     to_code: Function,
   },
 } = {
@@ -39,10 +38,13 @@ const bricks: {
       },
       next: null,
     },
-    fn: (i: Interpreter) => {
-      i.retriggerable = true;
+    to_code: (brick, util) => {
+      return `
+        global.$runtime_mgr.add_event_listener('on_updated', async (global) => {
+          ${util.brick_to_code(brick.next)}
+        });
+      `;
     },
-    to_code: () => {},
   },
   event_run_on_click: {
     brick_def: {
@@ -58,7 +60,6 @@ const bricks: {
         },
         {
           type: 'atomic_button',
-          is_static: true,
           ui: {
             className: atomicButtonRun,
           },
@@ -75,8 +76,14 @@ const bricks: {
       },
       next: null,
     },
-    fn: () => {},
-    to_code: () => {},
+    to_code: (brick, util) => {
+      return `
+        global.$runtime_mgr.add_event_listener('on_run_clicked', async (global) => {
+          ${util.brick_to_code(brick.next)}
+          return true;
+        });
+      `;
+    },
   },
   sensor_mouse: {
     brick_def: {
@@ -115,10 +122,6 @@ const bricks: {
         }],
       }],
       is_root: true,
-    },
-    fn: (interpreter: Interpreter, [mouse, status]) => {
-      const mouse_status = runtime_mgr.get_mouse_status();
-      return mouse_status[mouse === 1 ? 'left' : 'right'] as any === (status === 1 ? MOUSE_STATUS.down : MOUSE_STATUS.up);
     },
     to_code: (brick, o) => `(global.$runtime_mgr.get_mouse_status().${brick.inputs[0].computed === 1 ? 'left' : 'right'} === (${brick.inputs[1].computed}))`,
   },
@@ -168,7 +171,6 @@ const bricks: {
         },
       ],
     },
-    fn: (i, [key, key_status]) => runtime_mgr.get_key_status(key) === key_status,
     to_code: (brick, o) => `(global.$runtime_mgr.get_key_status(${brick.inputs[0].computed}) === ${brick.inputs[1].computed})`,
   },
   event_mouse: {
@@ -204,14 +206,10 @@ const bricks: {
       },
       next: null,
     },
-    fn: (interpreter: Interpreter, [mouse_status]) => {
-      interpreter.retriggerable = true;
-      if (!match_mouse_status[mouse_status](runtime_mgr.get_mouse_status())) {
-        interpreter.skip_on_end = true;
-        interpreter.sleep(0.01);
-      }
-    },
-    to_code: () => {},
+    to_code: (brick, util) => `
+      global.$runtime_mgr.add_event_listener('on_${brick.inputs[0].computed < 3 ? 'left' : 'right' }_mouse_${brick.inputs[0].computed % 2 ? 'up' : 'down'}', async (global) => {
+        ${util.brick_to_code(brick.next)}
+      });`,
   },
   event_key: {
     brick_def: {
@@ -266,14 +264,10 @@ const bricks: {
       },
       next: null,
     },
-    fn: (interpreter: Interpreter, [key, key_status]) => {
-      interpreter.retriggerable = true;
-      if (runtime_mgr.get_key_status(key) !== key_status) {
-        interpreter.skip_on_end = true;
-        interpreter.sleep(0.01);
-      }
-    },
-    to_code: () => {},
+    to_code: (brick, util) => `
+      global.$runtime_mgr.add_event_listener('on_key_${brick.inputs[0].computed}_${brick.inputs[1].computed === 1 ? 'down' : 'up'}', async (global) => {
+        ${util.brick_to_code(brick.next)}
+      });`,
   },
 };
 

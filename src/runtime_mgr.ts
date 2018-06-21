@@ -1,74 +1,34 @@
-import { Brick, Interpreter } from 'froggy-interpreter';
 import * as runtime_data from './runtime_data';
 
-type InterpreterMap = {
-  [id: string]: Interpreter;
-};
-
-let interpreters: InterpreterMap;
-let roots_needing_dispose;
-
 let animation;
-export let stage;
+export let is_running = false;
 
 let tick: Function = function() {};
-export function init(bricks_fn, procedures, root_bricks: Brick[]) {
-  roots_needing_dispose = [];
-  interpreters = {};
-  for (let i = 0; i < root_bricks.length; ++i) {
-    interpreters[root_bricks[i].id] = new Interpreter(bricks_fn, procedures, root_bricks[i]);
-  }
+export let stage;
+
+export function set_stage(s) {
+  stage = s;
 }
 
 export function set_tick_function(func: Function) {
   tick = func;
 }
 
-export function set_stage(s) {
-  stage = s;
-}
+let sleeping_fns = [] as [Function, number][];
 
 export function update() {
-  for (let i = 0; i < roots_needing_dispose.length; ++i) {
-    delete(interpreters[roots_needing_dispose[i]]);
-  }
-
-  if (!Object.keys(interpreters).length) {
-    stop();
-    return;
-  }
-  for (const i in interpreters) {
-    interpreters[i].step();
-    if (!interpreters[i].self && !interpreters[i].call_stack.length) {
-      dispose_root(i);
+  const now = Date.now();
+  for (let i = 0; i < sleeping_fns.length; ++i) {
+    if (sleeping_fns[i][1] < Date.now()) {
+      sleeping_fns[i][0]();
+      sleeping_fns.splice(i, 1);
+      --i;
     }
   }
   tick();
+  runtime_data.dispatch_event('on_updated');
   runtime_data.tick();
   animation = requestAnimationFrame(update);
-}
-
-export function dispose_root(root_id) {
-  const interpreter = interpreters[root_id];
-  if (!interpreter) {
-    return;
-  }
-  roots_needing_dispose.push(root_id);
-  delete(interpreters[root_id]);
-}
-
-export function get_global_variables() {
-  return runtime_data.get_global_variables();
-}
-export function get_global_variable(name: string) {
-  return runtime_data.get_global_variable(name);
-}
-export function set_global_variable(name: string, value) {
-  runtime_data.set_global_variable(name, value);
-}
-
-export function get_key_status(key_code: number) {
-  return runtime_data.get_key_status(key_code);
 }
 
 export function get_mouse_status() {
@@ -76,16 +36,27 @@ export function get_mouse_status() {
 }
 
 export function stop() {
-  const e = new Event('finished');
-  dispatchEvent(e);
+  is_running = false;
   runtime_data.stop();
   cancelAnimationFrame(animation);
+  sleeping_fns = [];
 }
 
-export function start(override_global_variables?) {
-  runtime_data.start();
-  if (override_global_variables) {
-    runtime_data.set_global_variables(override_global_variables);
-  }
+export function sleep(secs) {
+  return new Promise((r) => sleeping_fns.push([r, Date.now() + secs * 1000]));
+}
+
+export function start(global = {}) {
+  is_running = true;
+  runtime_data.start(global);
+  runtime_data.dispatch_event('on_run_clicked');
   update();
 }
+
+export {
+  add_event_listener,
+  get_key_status,
+  set_global_variable,
+  get_global_variable,
+  get_global_variables,
+} from './runtime_data';

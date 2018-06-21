@@ -5,7 +5,6 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
   entry: {
     index: './src/index.tsx',
-    no_interpreter: './test/no_interpreter.tsx',
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -51,11 +50,6 @@ module.exports = {
       filename: './index.html',
       chunks: ['index'],
       template: './index.html',
-    }),
-    new HtmlWebpackPlugin({
-      filename: './no_interpreter.html',
-      chunks: ['no_interpreter'],
-      template: './no_interpreter.html',
     }),
   ],
 };
