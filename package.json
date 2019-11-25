@@ -17,7 +17,7 @@
     "froggy": "^1.1.6",
     "froggy-interpreter": "^1.1.5",
     "keycode": "^2.2.0",
-    "lodash": "^4.17.5",
+    "lodash": "^4.17.13",
     "react": "^16.5.2",
     "react-addons-update": "^15.6.2",
     "react-dom": "^16.5.2",
