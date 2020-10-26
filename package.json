@@ -40,7 +40,7 @@
     "typescript": "^2.8.3",
     "typings-for-css-modules-loader": "^1.7.0",
     "webpack": "^4.6.0",
-    "webpack-dev-server": "^3.1.9",
+    "webpack-dev-server": "^3.1.11",
     "worker-loader": "^1.1.1"
   },
   "author": "greenSnot",
