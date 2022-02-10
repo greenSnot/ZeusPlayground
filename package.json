@@ -33,7 +33,7 @@
     "less": "^3.0.4",
     "less-loader": "^4.1.0",
     "microtime": "^3.0.0",
-    "node-sass": "^4.13.1",
+    "node-sass": "^7.0.0",
     "sass-loader": "^7.0.1",
     "style-loader": "^0.21.0",
     "ts-loader": "^4.2.0",
